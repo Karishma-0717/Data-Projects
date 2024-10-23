@@ -1,1 +1,146 @@
 
+select * from master.dbo.Data1;
+select * from master.dbo.Data2;
+
+--1.Number of rows int the dataset
+
+select count(*) from master.dbo.Data1;
+select count(*) from master.dbo.Data2;
+
+--2.Dataset for Jharkhand and Bihar
+
+select* from master..Data2 where State in('Jharkhand', 'Bihar');
+
+--3.population of India
+
+select sum(population) as Population from master..Data1;
+
+--4.Average growth by state
+
+select state,AVG(growth)*100 as Average_Growth from master..Data2 group by State;
+
+--5.Average sex ratio by state
+
+select state,round(AVG(sex_ratio),0) as Average_Sex_Ratio from master..Data2 
+group by State order by Average_Sex_Ratio desc;
+
+--6.Average literacy rate by state
+
+select state,round(AVG(literacy),0) as Average_literacy_ratio from master..Data2 
+group by State having round(AVG(literacy),0) > 90 order by Average_literacy_ratio desc;
+
+--7. Top 3 states with highest growth ratio
+
+select top 3 state,AVG(growth)*100 as Highest_Average_Growth from master..Data2 
+group by State order by Highest_Average_Growth desc;
+
+--8. Bottom 3 states with lowest sex ratio
+
+select top 3 state,round(AVG(sex_ratio),0) as Average_Sex_Ratio from master..Data2 
+group by State order by Average_Sex_Ratio asc;
+
+--9. Top and bottom 3 states in literacy 
+-- top 3
+create table #topstates
+(state varchar(255), 
+  topstates float
+)
+
+insert into #topstates
+select top 3 state,round(AVG(literacy),0)as Average_literacy_ratio from master..Data2 
+group by State order by Average_literacy_ratio desc;
+
+select * from #topstates
+
+--bottom 3
+create table #bottomstates
+(state varchar(255), 
+  topstates float
+)
+
+insert into #bottomstates
+select top 3 state,round(AVG(literacy),0)as Average_literacy_ratio from master..Data2 
+group by State order by Average_literacy_ratio asc;
+
+select * from #bottomstates
+
+--union operator
+select * from #topstates 
+union
+select * from #bottomstates;
+
+--10. States starting with letter a or b
+
+select distinct State from master..Data2 where lower(state) like 'a%' 
+or lower(state) like 'b%';
+
+--11. States starting with letter a and ends with h
+
+select distinct State from master..Data2 where lower(state) like 'a%' 
+and lower(state) like '%h';
+
+--12. Joining both table to find out number of females and males
+
+/* females/males = sex_ratio ....1
+   females+males=population .....2
+   females=population-males......3
+
+   (population-males)=(sex_ratio)*males
+   population=males(sex_ratio+1)
+
+  -- males = population/(sex_ratio+1) ---> to find out males
+  -- females = population-population/(sex_ratio+1)
+             = population(1-1(sex_ratio+1))
+			 = (population*sex_ratio)/(sex_ratio+1)---> to find out females */
+
+select district,state, round(c.population/(sex_ratio+1),0) as Males, round((c.population*sex_ratio)/(sex_ratio+1),0) as females from
+(select b.District,b.state,b.sex_ratio/1000 as sex_ratio,a.population from master..Data2 b
+inner join master..Data1 a on b.District=a.District) c;
+
+--13. total literacy rate
+/* total literate people / population = literacy_ratio
+total literate people = literacry_ratio * population
+total illiterate people = (1-literacy_ratio)*population 
+*/
+
+select d.District, d.state,round( d.literacy_ratio*d.population,0) as literate_people,round((1 - d.literacy_ratio)*d.population,0) as illiterate_people 
+from(
+select b.District,b.state,b.literacy/100 as literacy_ratio,a.population 
+from master..Data2 b
+inner join master..Data1 a on b.District=a.District) as d;
+
+--14. Population in previous census
+/* to calculate previous census
+previous_census+growth*previous_census=population
+previous_census=population/(1+growth)
+*/
+select sum(f.previous_census_population) as previous_census_population, sum(f.current_census_population) as current_census_population from(
+select e.state, sum(e.previous_census_population)as previous_census_population, sum(e.current_census_population)as current_census_population from
+(select d.district, d.state, round(d.population/(1+d.growth),0) as previous_census_population, d.population as current_census_population from
+(select b.District,b.state,b.growth as Growth,a.population from master..Data2 b
+inner join master..Data1 a on b.District=a.District) as d) as e
+group by e.state) as f;
+
+--15. population vs area
+select (l.total_area/l.previous_census_population) as previous_census_population_VS_area, (l.total_area/l.current_census_population) as current_census_population_VS_area from(
+select j.*, k.total_area from(
+select '1' as keyyy, g.*from(
+select sum(f.previous_census_population) as previous_census_population, sum(f.current_census_population) as current_census_population from(
+select e.state, sum(e.previous_census_population)as previous_census_population, sum(e.current_census_population)as current_census_population from
+(select d.district, d.state, round(d.population/(1+d.growth),0) as previous_census_population, d.population as current_census_population from
+(select b.District,b.state,b.growth as Growth,a.population from master..Data2 b
+inner join master..Data1 a on b.District=a.District) as d) as e
+group by e.state) as f) as g) j inner join(
+
+select '1' as keyyy,h.* from(
+select sum(area_km2) as total_area from master..Data1) as h) k on j.keyyy = k.keyyy) as l;
+
+--16. Using Window Fxn
+--output top 3 districts from each state with highest literacy rate
+
+select a.* from(
+select district, state, literacy, rank() over(partition by state order by 
+literacy desc) rnk from master..data2) as a
+where a.rnk in (1,2,3) order by state;
+
+
